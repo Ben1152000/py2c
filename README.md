@@ -6,3 +6,5 @@ Useful links:
 - Python Bytecode Format: https://nedbatchelder.com/blog/200804/the_structure_of_pyc_files.html#:~:text=pyc%20file%20is%20a%20binary,A%20marshalled%20code%20object.
 - Python library: https://docs.python.org/3.5/library/dis.html#python-bytecode-instructions
 - Java to C compiler: https://www.researchgate.net/publication/2433450_Toba_java_for_applications_a_way_ahead_of_time_WAT_compiler/citations
+- Cool diagram of pyc files: https://formats.kaitai.io/python_pyc_27/python_pyc_27.svg
+- 
