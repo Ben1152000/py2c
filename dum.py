@@ -1,4 +1,10 @@
-import dis, marshal, struct, sys, time, types
+import dis
+import marshal
+import struct
+import sys
+import time
+import types
+
 
 def show_file(fname):
     f = open(fname, "rb")
@@ -12,7 +18,8 @@ def show_file(fname):
     print(marshal.version)
     code = marshal.load(f)
     show_code(code)
-    
+
+
 def show_code(code, indent=''):
     print(f"{indent}code")
     indent += '   '
@@ -25,7 +32,7 @@ def show_code(code, indent=''):
     print(f"{indent}consts")
     for const in code.co_consts:
         if type(const) == types.CodeType:
-            show_code(const, indent+'   ')
+            show_code(const, indent + '   ')
         else:
             print(f"   {indent}{const} ({type(const)})")
     print(f"{indent}names {code.co_names}")
@@ -37,6 +44,7 @@ def show_code(code, indent=''):
     print(f"{indent}firstlineno {code.co_firstlineno}")
     show_hex("lnotab", code.co_lnotab, indent=indent)
 
+
 def show_hex(label, h, indent):
     h = h.hex()
     if len(h) < 60:
@@ -45,5 +53,6 @@ def show_hex(label, h, indent):
         print(f"{indent}{label}")
         for i in range(0, len(h), 60):
             print(f"{indent}   {h[i:i+60]}")
+
 
 show_file(sys.argv[1])
