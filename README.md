@@ -8,3 +8,7 @@ Useful links:
 - Java to C compiler: https://www.researchgate.net/publication/2433450_Toba_java_for_applications_a_way_ahead_of_time_WAT_compiler/citations
 - Cool diagram of pyc files: https://formats.kaitai.io/python_pyc_27/python_pyc_27.svg
 - 
+
+Usage:
+- Run `./compile` to compile the example files
+- Compiled files will be in `tests/__pycache__`

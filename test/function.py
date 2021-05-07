@@ -1,5 +1,4 @@
 def f():
-    def g():
-        return 3.14159
-    return g()
+    return 3.14159
+
 f()
