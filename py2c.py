@@ -4,8 +4,35 @@ import sys
 import inspect
 from ir import FunctionBlock, Assignment, Variable, FunctionPointer, FunctionCall
 
-
 class CodeTranslator:
+    
+    def __init__(self, code):
+        self.code = code
+        self.includes = [
+            '<stdio.h>'
+        ]
+
+    def translate(self):
+        output = ''
+
+        # list files to include
+        for include in self.includes:
+            output += f'#include {include}\n'
+
+        compiled_code, func_table = FunctionTranslator(self.code).translate()
+
+        # handle function table
+        for func_decl in func_table:
+            output += func_decl + '\n'
+
+        # add main function declaration to main method
+        output += 'int main(int argc, char* argv[]){\n'
+        output += compiled_code
+        output += 'return 0;\n}\n'
+        
+        return output
+
+class FunctionTranslator:
     c_types = ['long', 'double', 'char*', 'void*']
     py2c_type_map = {int: 'long', float: 'double', str: 'char*'}
     numeric_types = [int, float]
@@ -16,13 +43,14 @@ class CodeTranslator:
         # stack of function names
         # since pushing them to the actual stack is annoying
         self.func_stack = []
+        self.func_decls = []
 
         # The ir representation of the function output
         self.fb = FunctionBlock()
 
         # current instruction index and instruction
         self.instr_idx = 0
-        self.cur_instr = 0
+        self.cur_instr = None
 
         self.stack_depths = []
 
@@ -56,17 +84,6 @@ class CodeTranslator:
     def local_var(self, idx):
         return self.fb.local_vars[idx]
 
-    def LOAD_CONST(self):
-        const_idx = self.cur_instr.arg
-        const_val = self.code.co_consts[const_idx]
-        const_type = type(const_val)
-        self.stack_types.append(const_type)
-        # TODO not loading None onto stack for now
-        if const_val is None:
-            return ''
-        stack_var = self.res_stack_var(const_type)
-        return Assignment(stack_var, Variable(const_val, const_type))
-
     def BINARY_ADD(self):
         lhs_type = self.stack_types[-2]
         rhs_type = self.stack_types[-1]
@@ -76,11 +93,7 @@ class CodeTranslator:
                 f'{inspect.stack()[0][3]}:'
                 ' addition on non-numeric types is not implemented')
 
-        res_type = None
-        if lhs_type == float or rhs_type == float:
-            res_type = float
-        else:
-            res_type = int
+        res_type = float if (lhs_type == float or rhs_type == float) else int
 
         res_stack_var = self.res_stack_var(res_type)
         lhs_stack_var = self.get_stack_var(1)
@@ -92,6 +105,28 @@ class CodeTranslator:
 
         return Assignment(res_stack_var,
                           f'{lhs_stack_var.name} + {rhs_stack_var.name}')
+
+    def CALL_FUNCTION(self):
+        argc = self.cur_instr.arg
+        args = []
+        for i in range(argc, 0, -1):
+            args.append(self.get_stack_var(i - 1))
+            self.stack_types.pop()
+        func_name = self.func_stack.pop()
+        # TODO append function's return type to type_stack
+        self.stack_types.append(int)
+        return FunctionCall(func_name, args)
+
+    def LOAD_CONST(self):
+        const_idx = self.cur_instr.arg
+        const_val = self.code.co_consts[const_idx]
+        const_type = type(const_val)
+        self.stack_types.append(const_type)
+        # TODO not loading None onto stack for now
+        if const_val is None:
+            return ''
+        stack_var = self.res_stack_var(const_type)
+        return Assignment(stack_var, Variable(const_val, const_type))
 
     def LOAD_NAME(self):
         local_idx = self.cur_instr.arg
@@ -106,22 +141,24 @@ class CodeTranslator:
         self.stack_types.append(int)
         return Assignment(stack_var, local_var)
 
-    def STORE_NAME(self):
-        local_idx = self.cur_instr.arg
-        local_var = self.local_var(local_idx)
-        stack_var = self.get_stack_var(0)
-        self.stack_types.pop()
-        return Assignment(local_var, stack_var)
+    def MAKE_FUNCTION(self):
+        # TODO implement make function
+        # remove last 4 from statements
+        # look back to signature tuple and figure out types
+        # get rid of 1 + params statements
+        # recursively compile the function
+        # add it to func decls
+        code_object = None # get from const table
+        assert type(code_object) == types.CodeType
+        func_body, rec_func_decls = CodeTranslator(code_object).translate()
+        self.func_decls += rec_func_decls
+        func_decl = f'void f() {{{func_body}}}' # construct function signature
+        self.func_decls.append(func_decl)
+        # do some other stuff to make it locally callible?
 
-    def CALL_FUNCTION(self):
-        argc = self.cur_instr.arg
-        args = []
-        for i in range(argc, 0, -1):
-            args.append(self.get_stack_var(i - 1))
-            self.stack_types.pop()
-        func_name = self.func_stack.pop()
-        # TODO append function's return type to type_stack
-        return FunctionCall(func_name, args)
+    def POP_TOP(self):
+        self.stack_types.pop()
+        return ''
 
     def RETURN_VALUE(self):
         self.stack_types.pop()
@@ -130,12 +167,16 @@ class CodeTranslator:
         ret_var = self.get_stack_var(0)
         return f'return {ret_var};\n'
 
-    def POP_TOP(self):
-        return ''
+    def STORE_NAME(self):
+        local_idx = self.cur_instr.arg
+        local_var = self.local_var(local_idx)
+        stack_var = self.get_stack_var(0)
+        self.stack_types.pop()
+        return Assignment(local_var, stack_var)
 
-    def translate(self):
-        output = '#include <stdio.h>\n'
-        output += 'int main(int argc, char* argv[]){\n'
+    def translate(self, main=False):
+        output = ''
+        
         # create a stack for each type
         for _type in CodeTranslator.c_types:
             for i in range(max(self.stack_depths)):
@@ -157,9 +198,8 @@ class CodeTranslator:
             self.instr_idx += 1
 
         output += str(self.fb)
-        output += 'return 0;\n'
-        output += '}'
-        return output
+
+        return output, func_decls
 
 
 def get_code(fname):
@@ -171,7 +211,10 @@ def get_code(fname):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print(f'Usage: {sys.argv[0]} pyc_file')
+        print(f'Usage: {sys.argv[0]} pyc_file [out_file]')
         exit(1)
+    if len(sys.argv) < 3:
+        sys.argv.append('.'.join(sys.argv[1].split('.')[:-1]) + '.c')
     code = get_code(sys.argv[1])
-    print(CodeTranslator(code).translate())
+    with open(sys.argv[2], 'w') as writefile:
+        writefile.write(CodeTranslator(code).translate(main=True))
