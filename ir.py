@@ -49,6 +49,14 @@ class Assignment:
         return f'{self.lhs.name} = {self.rhs};\n'
 
 
+class Statement:
+    def __init__(self, expr):
+        self.expr = expr
+
+    def __str__(self):
+        return f'{self.expr};\n'
+
+
 class FunctionCall:
     def __init__(self, name, args):
         self.name = name
@@ -56,4 +64,4 @@ class FunctionCall:
 
     def __str__(self):
         arg_str = ', '.join([arg.name for arg in self.args])
-        return f'{self.name}({arg_str});\n'
+        return f'{self.name}({arg_str})'

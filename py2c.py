@@ -135,17 +135,24 @@ class FunctionTranslator:
                           f'{lhs_stack_var.name} * {rhs_stack_var.name}')
 
     def BUILD_CONST_KEY_MAP(self):
-        self.stack_types.append(tuple)
+        count = self.cur_instr.arg
+        self.stack_types.pop()  # tuple of keys
+        # pop values
+        for i in range(count):
+            self.stack_types.pop()
+        self.stack_types.append(dict)
         print("I'm building a const key map! whatever that means...")
+        return ''
 
     def CALL_FUNCTION(self):
         argc = self.cur_instr.arg
         args = []
-        for i in range(argc, 0, -1):
-            args.append(self.get_stack_var(i - 1))
+        for i in range(argc):
+            args.append(self.get_stack_var(argc - i - 1))
+        for i in range(argc):
             self.stack_types.pop()
         fp = self.stack_types.pop()
-        ret_type = fp.func_sig[-1][1]
+        ret_type = fp.func_sig[-1][0]
         self.stack_types.append(ret_type)
         stack_var = self.res_stack_var(ret_type)
         return Assignment(stack_var, FunctionCall(fp.name, args))
@@ -169,14 +176,14 @@ class FunctionTranslator:
     def LOAD_FAST(self):
         local_idx = self.cur_instr.arg
         if local_idx < len(self.func_sig):
-            local_var = self.func_sig[local_idx]
+            local_type, local_var = self.func_sig[local_idx]
         else:
             local_var = self.fb.fast_local_vars[local_idx]
-        local_type = type(local_var)
+            local_type = type(local_var)
         if local_type == FunctionPointer:
             self.stack_types.append(local_var)
             return ''
-        # TODO figure out the time of the local
+        # TODO figure out the type of the local
         self.stack_types.append(int)
         stack_var = self.res_stack_var(int)
         if local_type == types.CodeType:
@@ -185,6 +192,7 @@ class FunctionTranslator:
             return ''
         if local_var is None:
             return ''
+        print(stack_var, local_var)
         return Assignment(stack_var, local_var)
 
     def LOAD_GLOBAL(self):
@@ -211,6 +219,14 @@ class FunctionTranslator:
         return Assignment(stack_var, local_var)
 
     def MAKE_FUNCTION(self):
+        self.stack_types.pop()  # function name
+        self.stack_types.pop()  # code object
+        flags = self.cur_instr.arg
+        # args corresponding to flags
+        for bit in bin(flags):
+            if bit == '1':
+                self.stack_types.pop()
+
         # remove last 4 from statements
         self.fb.statements.pop()  # load function name
         name = self.code.co_consts[self.instructions[self.instr_idx - 1].arg]
@@ -231,16 +247,15 @@ class FunctionTranslator:
                 self.code.co_names[self.instructions[self.instr_idx - 5 -
                                                      i].arg])
         param_types.reverse()
-        func_sig = [(param_names[i],
-                     FunctionTranslator.str_to_type[param_types[i]])
-                    for i in range(len(param_names))]
+        func_sig = [(FunctionTranslator.str_to_type[param_types[i]],
+                     param_names[i]) for i in range(len(param_names))]
 
         # recursively compile the function, add it to func decls
         func_body, rec_func_decls = FunctionTranslator(code_object,
                                                        func_sig).translate()
         self.func_decls += rec_func_decls
-        func_decl = f'{FunctionTranslator.py2c_type_map[func_sig[-1][1]]} {name}(' \
-            f'{", ".join([f"{FunctionTranslator.py2c_type_map[param[1]]} {param[0]}" for param in func_sig[:-1]])}' \
+        func_decl = f'{FunctionTranslator.py2c_type_map[func_sig[-1][0]]} {name}(' \
+            f'{", ".join([f"{FunctionTranslator.py2c_type_map[param[0]]} {param[1]}" for param in func_sig[:-1]])}' \
             f') {{{func_body}}}'  # construct function signature
         self.func_decls.append(func_decl)
         fp = FunctionPointer(name, func_sig)
@@ -303,12 +318,14 @@ class FunctionTranslator:
             self.fb.fast_local_vars.append(Variable(f'fl{i}', 'long'))
 
         for instr in self.instructions:
+            print(self.stack_depths[self.instr_idx])
             print(self.stack_types)
             print(instr.opname)
             self.cur_instr = instr
             self.fb.statements.append(self.opcode_map(instr.opname)())
             self.instr_idx += 1
 
+        # print(self.fb.statements)
         output += str(self.fb)
 
         return (output, self.func_decls)
