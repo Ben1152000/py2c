@@ -13,25 +13,28 @@ class Variable:
 
 # these have a different __str__ method so they are separate from Variable
 class FunctionPointer:
-    def __init__(self, name, decl):
+    def __init__(self, name, func_sig):
         self.name = name
-        self.decl = decl
-
-    def __str__(self):
-        return f'{self.decl};\n'
+        self.func_sig = func_sig
 
 
 class FunctionBlock:
     def __init__(self):
         self.stack_vars = []
         self.local_vars = []
+        self.fast_local_vars = []
         self.statements = []
+
+    def keep_good(self, val):
+        return not isinstance(val, FunctionPointer)
 
     def __str__(self):
         output = ''
-        output += ''.join(map(str, self.stack_vars))
-        output += ''.join(map(str, self.local_vars))
-        output += ''.join(map(str, self.statements))
+        output += ''.join(map(str, filter(self.keep_good, self.stack_vars)))
+        output += ''.join(map(str, filter(self.keep_good, self.local_vars)))
+        output += ''.join(
+            map(str, filter(self.keep_good, self.fast_local_vars)))
+        output += ''.join(map(str, filter(self.keep_good, self.statements)))
         return output
 
 
