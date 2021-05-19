@@ -12,3 +12,18 @@ Useful links:
 Usage:
 - Run `./compile` to compile the example files
 - Compiled files will be in `tests/__pycache__`
+
+## TODO:
+1) Get 6-10 working cases that display a range of python syntax.
+2) *implement loops
+3) Runtime benchmark comparisons to python3.9, cpython, cython, java converter?
+4) explanation!
+
+## Presentation:
+1) explain the project idea
+2) justification
+3) explain the nuances of the .pyc bytecode
+4) what we did, our assumptions, general implementation
+5) results
+6) further stuff?
+

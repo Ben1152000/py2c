@@ -1,7 +1,7 @@
 import dis
 import inspect
 from ir import FunctionBlock, Assignment, \
-    Variable, FunctionPointer, FunctionCall
+    Variable, FunctionPointer, FunctionCall, Print
 import marshal
 import sys
 import types
@@ -19,8 +19,8 @@ class CodeTranslator:
         for include in self.includes:
             output += f'#include {include}\n'
 
-        compiled_code, func_table = FunctionTranslator(self.code,
-                                                       []).translate()
+        compiled_code, func_table = FunctionTranslator(code=self.code,
+                                                       func_sig=[]).translate()
 
         # handle function table
         for func_decl in func_table:
@@ -35,27 +35,37 @@ class CodeTranslator:
 
 
 class FunctionTranslator:
-    c_types = ['long', 'double', 'char*', 'void*']
-    py2c_type_map = {
+    C_TYPES = ['long', 'double', 'char*']
+    C_TYPE_MAP = {
         int: 'long',
         'int': 'long',
         float: 'double',
         'float': 'double',
         str: 'char*',
-        'str': 'char*'
+        'str': 'char*',
+        bool: 'long',
+        'bool': 'long'
     }
-    str_to_type = {'int': int, 'float': float, 'str': str}
-    numeric_types = [int, float]
+    STR_TO_TYPE = {'int': int, 'float': float, 'str': str, 'bool': bool}
+    NUMERIC_TYPES = [int, float]
 
-    def __init__(self, code, func_sig):
+    def __init__(self, code, func_sig, globals_=None):
         self.opcode_map = lambda name: getattr(self, name)
 
         self.func_decls = []
 
+        self.code = code
         self.func_sig = func_sig
 
         # The ir representation of the function output
         self.fb = FunctionBlock()
+
+        self.globals = globals_
+        if not self.globals:
+            self.globals = {
+                'names': self.code.co_names,
+                'locals': self.fb.local_vars
+            }
 
         # current instruction index and instruction
         self.instr_idx = 0
@@ -66,7 +76,6 @@ class FunctionTranslator:
         # current types on the stack
         self.stack_types = []
 
-        self.code = code
         self.instructions = list(dis.get_instructions(self.code))
 
         depth = 0
@@ -78,7 +87,7 @@ class FunctionTranslator:
     # based on current stack depth and variable type
     def res_stack_var(self, _type):
         cur_depth = self.stack_depths[self.instr_idx + 1]
-        c_type = self.py2c_type_map[_type]
+        c_type = self.C_TYPE_MAP[_type]
         return Variable(f's{c_type[0]}{cur_depth - 1}', c_type)
 
     # get the stack var at the offset from the top of the stack
@@ -87,14 +96,14 @@ class FunctionTranslator:
         stack_var_idx = self.stack_depths[self.instr_idx] - offset - 1
         assert stack_var_idx >= 0
         stack_var_type = self.stack_types[stack_var_idx]
-        c_type = self.py2c_type_map[stack_var_type]
+        c_type = self.C_TYPE_MAP[stack_var_type]
         return Variable(f's{c_type[0]}{stack_var_idx}', c_type)
 
     def BINARY_ADD(self):
         lhs_type = self.stack_types[-2]
         rhs_type = self.stack_types[-1]
-        if (lhs_type not in FunctionTranslator.numeric_types) or (
-                rhs_type not in FunctionTranslator.numeric_types):
+        if (lhs_type not in FunctionTranslator.NUMERIC_TYPES) or (
+                rhs_type not in FunctionTranslator.NUMERIC_TYPES):
             raise Exception(
                 f'{inspect.stack()[0][3]}:'
                 ' addition on non-numeric types is not implemented')
@@ -115,8 +124,8 @@ class FunctionTranslator:
     def BINARY_MULTIPLY(self):
         lhs_type = self.stack_types[-2]
         rhs_type = self.stack_types[-1]
-        if (lhs_type not in FunctionTranslator.numeric_types) or (
-                rhs_type not in FunctionTranslator.numeric_types):
+        if (lhs_type not in FunctionTranslator.NUMERIC_TYPES) or (
+                rhs_type not in FunctionTranslator.NUMERIC_TYPES):
             raise Exception(
                 f'{inspect.stack()[0][3]}:'
                 ' multiplication on non-numeric types is not implemented')
@@ -152,8 +161,13 @@ class FunctionTranslator:
         for i in range(argc):
             self.stack_types.pop()
         fp = self.stack_types.pop()
+        if isinstance(fp, Print):
+            self.stack_types.append(None)
+            return Print(args=args)
         ret_type = fp.func_sig[-1][0]
         self.stack_types.append(ret_type)
+        if ret_type is None:
+            return FunctionCall(fp.name, args)
         stack_var = self.res_stack_var(ret_type)
         return Assignment(stack_var, FunctionCall(fp.name, args))
 
@@ -175,7 +189,7 @@ class FunctionTranslator:
 
     def LOAD_FAST(self):
         local_idx = self.cur_instr.arg
-        if local_idx < len(self.func_sig):
+        if local_idx < len(self.func_sig) - 1:
             local_type, local_var = self.func_sig[local_idx]
         else:
             local_var = self.fb.fast_local_vars[local_idx]
@@ -196,27 +210,36 @@ class FunctionTranslator:
         return Assignment(stack_var, local_var)
 
     def LOAD_GLOBAL(self):
-        self.stack_types.append(int)
-        print("I just loaded your global.")
+        global_name = self.code.co_names[self.cur_instr.arg]
+        global_var = self.globals['locals'][self.globals['names'].index(global_name)]
+        local_type = type(global_var)
+        if local_type == FunctionPointer:
+            self.stack_types.append(global_var)
+            return ''
+        # TODO get the actual type of the local var
+        if type(global_var) == Variable and global_var.py_type != '':
+            self.stack_types.append(global_var.py_type)
+            stack_var = self.res_stack_var(global_var.py_type)
+            return Assignment(stack_var, global_var)
+        self.stack_types.append(None)
         return ''
 
     def LOAD_NAME(self):
         local_idx = self.cur_instr.arg
         local_var = self.fb.local_vars[local_idx]
-        local_type = type(local_var)
-        if local_type == FunctionPointer:
+        if type(local_var) == FunctionPointer:
             self.stack_types.append(local_var)
             return ''
         # TODO get the actual type of the local var
-        self.stack_types.append(int)
-        stack_var = self.res_stack_var(int)
-        if local_type == types.CodeType:
+        if type(local_var) == Variable and local_var.py_type != '':
+            self.stack_types.append(local_var.py_type)
+            stack_var = self.res_stack_var(local_var.py_type)
+            return Assignment(stack_var, local_var)
+        if self.code.co_names[local_idx] == 'print':
+            self.stack_types.append(Print())
             return ''
-        if local_type == tuple:
-            return ''
-        if local_type is None:
-            return ''
-        return Assignment(stack_var, local_var)
+        self.stack_types.append(None)
+        return ''
 
     def MAKE_FUNCTION(self):
         self.stack_types.pop()  # function name
@@ -247,15 +270,18 @@ class FunctionTranslator:
                 self.code.co_names[self.instructions[self.instr_idx - 5 -
                                                      i].arg])
         param_types.reverse()
-        func_sig = [(FunctionTranslator.str_to_type[param_types[i]],
+        func_sig = [(FunctionTranslator.STR_TO_TYPE[param_types[i]],
                      param_names[i]) for i in range(len(param_names))]
 
         # recursively compile the function, add it to func decls
-        func_body, rec_func_decls = FunctionTranslator(code_object,
-                                                       func_sig).translate()
+        func_body, rec_func_decls = FunctionTranslator(
+            code=code_object,
+            func_sig=func_sig, 
+            globals_=self.globals
+        ).translate()
         self.func_decls += rec_func_decls
-        func_decl = f'{FunctionTranslator.py2c_type_map[func_sig[-1][0]]} {name}(' \
-            f'{", ".join([f"{FunctionTranslator.py2c_type_map[param[0]]} {param[1]}" for param in func_sig[:-1]])}' \
+        func_decl = f'{FunctionTranslator.C_TYPE_MAP[func_sig[-1][0]]} {name}(' \
+            f'{", ".join([f"{FunctionTranslator.C_TYPE_MAP[param[0]]} {param[1]}" for param in func_sig[:-1]])}' \
             f') {{{func_body}}}'  # construct function signature
         self.func_decls.append(func_decl)
         fp = FunctionPointer(name, func_sig)
@@ -274,6 +300,11 @@ class FunctionTranslator:
         self.stack_types.pop()
         return f'return {ret_var.name};\n'
 
+    def SETUP_ANNOTATIONS(self):
+        # create local dictionary call __annotations__
+        pass
+        return ''
+
     def STORE_FAST(self):
         local_idx = self.cur_instr.arg
         local_var = self.fb.fast_local_vars[local_idx]
@@ -283,6 +314,11 @@ class FunctionTranslator:
         if isinstance(self.stack_types[-1], FunctionPointer):
             self.fb.fast_local_vars[local_idx] = self.stack_types.pop()
             return ''
+        if local_var.type == '':
+            local_var.py_type = self.stack_types[-1]
+            local_var.type = self.C_TYPE_MAP[self.stack_types[-1]]
+        elif local_var.py_type != self.stack_types[-1]:
+            raise TypeError(f'variable {self.code.co_varnames[local_idx]} must have unchanging type')
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return Assignment(local_var, stack_var)
@@ -296,30 +332,45 @@ class FunctionTranslator:
         if isinstance(self.stack_types[-1], FunctionPointer):
             self.fb.local_vars[local_idx] = self.stack_types.pop()
             return ''
+        if local_var.type == '':
+            local_var.py_type = self.stack_types[-1]
+            local_var.type = self.C_TYPE_MAP[self.stack_types[-1]]
+        elif local_var.py_type != self.stack_types[-1]:
+            raise TypeError(f'variable {self.code.co_names[local_idx]} must have unchanging type')
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return Assignment(local_var, stack_var)
+
+    def STORE_SUBSCR(self):
+        array_idx = self.stack_types.pop()
+        self.fb.statements.pop()
+        array_name = self.stack_types.pop()
+        self.fb.statements.pop()
+        array_val = self.stack_types.pop()
+        self.fb.statements.pop()
+        # TODO actually do the right store_subscr
+        return ''
 
     def translate(self):
         output = ''
 
         # create a stack for each type
-        for _type in FunctionTranslator.c_types:
+        for _type in FunctionTranslator.C_TYPES:
             for i in range(max(self.stack_depths)):
                 self.fb.stack_vars.append(Variable(f's{_type[0]}{i}', _type))
 
         # TODO figure out the actual types of local variables
         # create local variables
         for i, name in enumerate(self.code.co_names):
-            self.fb.local_vars.append(Variable(f'l{i}', 'long'))
+            self.fb.local_vars.append(Variable(f'loc{i}', ''))
 
         # create FAST local variables
         for i, name in enumerate(self.code.co_varnames):
-            self.fb.fast_local_vars.append(Variable(f'fl{i}', 'long'))
+            self.fb.fast_local_vars.append(Variable(f'fasloc{i}', ''))
 
         for instr in self.instructions:
-            print(self.stack_depths[self.instr_idx])
-            print(self.stack_types)
+            print('stack_depths:', self.stack_depths[self.instr_idx])
+            print('stack_types:', self.stack_types)
             print(instr.opname)
             self.cur_instr = instr
             self.fb.statements.append(self.opcode_map(instr.opname)())
@@ -327,6 +378,7 @@ class FunctionTranslator:
 
         # print(self.fb.statements)
         output += str(self.fb)
+        print(str(self.fb))
 
         return (output, self.func_decls)
 

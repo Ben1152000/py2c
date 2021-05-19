@@ -2,14 +2,11 @@ class Variable:
     def __init__(self, name, _type=None):
         self.name = name
         self.type = _type
+        self.py_type = ''
 
     def __str__(self):
-        if not self.type:
-            raise Exception(
-                f'Variable "{self.name}" does not have a known type')
-
-        return f'{self.type} {self.name};\n'
-
+        return f'{self.type} {self.name};\n' if self.type else ''
+    
 
 # these have a different __str__ method so they are separate from Variable
 class FunctionPointer:
@@ -65,3 +62,13 @@ class FunctionCall:
     def __str__(self):
         arg_str = ', '.join([arg.name for arg in self.args])
         return f'{self.name}({arg_str})'
+
+class Print:
+    FORMATTERS = {'long': '%ld', 'double': '%lf', 'char *': '%s'}
+
+    def __init__(self, args=None):
+        self.args = args
+
+    def __str__(self):
+        return f'printf("{" ".join([Print.FORMATTERS[arg.type] for arg in self.args])}\\n"' \
+               f", {', '.join([arg.name for arg in self.args])});"
