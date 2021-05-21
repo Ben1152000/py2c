@@ -291,10 +291,10 @@ class FunctionTranslator:
 
     def LOAD_GLOBAL(self):
         global_name = self.code.co_names[self.cur_instr.arg]
-        global_var = self.globals['locals'][self.globals['names'].index(
-            global_name)]
-        print('the index:', self.globals['names'].index(global_name))
-        print(self.globals)
+        if global_name in self.globals['names']:
+            global_var = self.globals['locals'][self.globals['names'].index(global_name)]
+        else:
+            global_var = self.fb.local_vars[self.cur_instr.arg]
         global_type = type(global_var)
         print('debug: ', 'gname', global_name, 'gvar', global_var, 'gtype', global_type)
         if global_type == FunctionPointer:
