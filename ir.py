@@ -6,7 +6,7 @@ class Variable:
 
     def __str__(self):
         return f'{self.type} {self.name};\n' if self.type else ''
-    
+
 
 # these have a different __str__ method so they are separate from Variable
 class FunctionPointer:
@@ -46,12 +46,13 @@ class Assignment:
         return f'{self.lhs.name} = {self.rhs};\n'
 
 
-class Statement:
-    def __init__(self, expr):
-        self.expr = expr
+class IfStatement:
+    def __init__(self, cond, body):
+        self.cond = cond
+        self.body = body
 
     def __str__(self):
-        return f'{self.expr};\n'
+        return f'if({self.cond}){{\n{self.body}\n}}\n'
 
 
 class FunctionCall:
@@ -63,6 +64,7 @@ class FunctionCall:
         arg_str = ', '.join([arg.name for arg in self.args])
         return f'{self.name}({arg_str})'
 
+
 class Print:
     FORMATTERS = {'long': '%ld', 'double': '%lf', 'char *': '%s'}
 
@@ -71,4 +73,4 @@ class Print:
 
     def __str__(self):
         return f'printf("{" ".join([Print.FORMATTERS[arg.type] for arg in self.args])}\\n"' \
-               f", {', '.join([arg.name for arg in self.args])});"
+               f", {', '.join([arg.name for arg in self.args])});\n"

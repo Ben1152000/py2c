@@ -1,7 +1,8 @@
 import dis
 import inspect
 from ir import FunctionBlock, Assignment, \
-    Variable, FunctionPointer, FunctionCall, Print
+    Variable, FunctionPointer, FunctionCall, Print, \
+    IfStatement
 import marshal
 import sys
 import types
@@ -19,8 +20,8 @@ class CodeTranslator:
         for include in self.includes:
             output += f'#include {include}\n'
 
-        compiled_code, func_table = FunctionTranslator(code=self.code,
-                                                       func_sig=[]).translate()
+        compiled_code, func_table = FunctionTranslator(
+            code=self.code, func_sig=[]).translate()
 
         # handle function table
         for func_decl in func_table:
@@ -71,13 +72,12 @@ class FunctionTranslator:
         self.instr_idx = 0
         self.cur_instr = None
 
-        self.stack_depths = []
-
         # current types on the stack
         self.stack_types = []
 
         self.instructions = list(dis.get_instructions(self.code))
 
+        self.stack_depths = []
         depth = 0
         for instruction in self.instructions:
             self.stack_depths.append(depth)
@@ -110,7 +110,7 @@ class FunctionTranslator:
 
         res_type = float if (lhs_type == float or rhs_type == float) else int
 
-        res_stack_var = self.res_stack_var(res_type)
+        stack_var = self.res_stack_var(res_type)
         lhs_stack_var = self.get_stack_var(1)
         rhs_stack_var = self.get_stack_var(0)
 
@@ -118,7 +118,7 @@ class FunctionTranslator:
         self.stack_types.pop()
         self.stack_types.append(res_type)
 
-        return Assignment(res_stack_var,
+        return Assignment(stack_var,
                           f'{lhs_stack_var.name} + {rhs_stack_var.name}')
 
     def BINARY_MULTIPLY(self):
@@ -132,7 +132,7 @@ class FunctionTranslator:
 
         res_type = float if (lhs_type == float or rhs_type == float) else int
 
-        res_stack_var = self.res_stack_var(res_type)
+        stack_var = self.res_stack_var(res_type)
         lhs_stack_var = self.get_stack_var(1)
         rhs_stack_var = self.get_stack_var(0)
 
@@ -140,7 +140,7 @@ class FunctionTranslator:
         self.stack_types.pop()
         self.stack_types.append(res_type)
 
-        return Assignment(res_stack_var,
+        return Assignment(stack_var,
                           f'{lhs_stack_var.name} * {rhs_stack_var.name}')
 
     def BUILD_CONST_KEY_MAP(self):
@@ -170,6 +170,31 @@ class FunctionTranslator:
             return FunctionCall(fp.name, args)
         stack_var = self.res_stack_var(ret_type)
         return Assignment(stack_var, FunctionCall(fp.name, args))
+
+    def COMPARE_OP(self):
+        op_idx = self.cur_instr.arg
+        op_name = dis.cmp_op[op_idx]
+
+        stack_var = self.res_stack_var(bool)
+        lhs_stack_var = self.get_stack_var(1)
+        rhs_stack_var = self.get_stack_var(0)
+
+        self.stack_types.pop()
+        self.stack_types.pop()
+        self.stack_types.append(bool)
+
+        return Assignment(
+            stack_var, f'{lhs_stack_var.name} {op_name} {rhs_stack_var.name}')
+
+    def INPLACE_ADD(self):
+        return self.BINARY_ADD()
+
+    def INPLACE_MULTIPLY(self):
+        return self.BINARY_MULTIPLY()
+
+    def JUMP_ABSOLUTE(self):
+        target = self.cur_instr.arg
+        return f'goto L{target};\n'
 
     def LOAD_CONST(self):
         const_idx = self.cur_instr.arg
@@ -211,16 +236,18 @@ class FunctionTranslator:
 
     def LOAD_GLOBAL(self):
         global_name = self.code.co_names[self.cur_instr.arg]
-        global_var = self.globals['locals'][self.globals['names'].index(global_name)]
+        global_var = self.globals['locals'][self.globals['names'].index(
+            global_name)]
         local_type = type(global_var)
         if local_type == FunctionPointer:
             self.stack_types.append(global_var)
             return ''
-        # TODO get the actual type of the local var
+        # if the global variable doesn't have a type assign it type of TOS
         if type(global_var) == Variable and global_var.py_type != '':
             self.stack_types.append(global_var.py_type)
             stack_var = self.res_stack_var(global_var.py_type)
             return Assignment(stack_var, global_var)
+        # TODO get the actual type of the global var
         self.stack_types.append(None)
         return ''
 
@@ -230,7 +257,7 @@ class FunctionTranslator:
         if type(local_var) == FunctionPointer:
             self.stack_types.append(local_var)
             return ''
-        # TODO get the actual type of the local var
+        # if the local variable doesn't have a type assign it type of TOS
         if type(local_var) == Variable and local_var.py_type != '':
             self.stack_types.append(local_var.py_type)
             stack_var = self.res_stack_var(local_var.py_type)
@@ -238,6 +265,7 @@ class FunctionTranslator:
         if self.code.co_names[local_idx] == 'print':
             self.stack_types.append(Print())
             return ''
+        # TODO get the actual type of the local var
         self.stack_types.append(None)
         return ''
 
@@ -275,10 +303,8 @@ class FunctionTranslator:
 
         # recursively compile the function, add it to func decls
         func_body, rec_func_decls = FunctionTranslator(
-            code=code_object,
-            func_sig=func_sig, 
-            globals_=self.globals
-        ).translate()
+            code=code_object, func_sig=func_sig,
+            globals_=self.globals).translate()
         self.func_decls += rec_func_decls
         func_decl = f'{FunctionTranslator.C_TYPE_MAP[func_sig[-1][0]]} {name}(' \
             f'{", ".join([f"{FunctionTranslator.C_TYPE_MAP[param[0]]} {param[1]}" for param in func_sig[:-1]])}' \
@@ -292,6 +318,18 @@ class FunctionTranslator:
         self.stack_types.pop()
         return ''
 
+    def POP_JUMP_IF_FALSE(self):
+        target = self.cur_instr.arg
+        stack_var = self.get_stack_var(0)
+        self.stack_types.pop()
+        return IfStatement(f'!{stack_var.name}', f'goto L{target};')
+
+    def POP_JUMP_IF_TRUE(self):
+        target = self.cur_instr.arg
+        stack_var = self.get_stack_var(0)
+        self.stack_types.pop()
+        return IfStatement(f'{stack_var.name}', f'goto L{target};')
+
     def RETURN_VALUE(self):
         if self.stack_types[-1] == type(None):
             self.stack_types.pop()
@@ -302,7 +340,6 @@ class FunctionTranslator:
 
     def SETUP_ANNOTATIONS(self):
         # create local dictionary call __annotations__
-        pass
         return ''
 
     def STORE_FAST(self):
@@ -318,7 +355,9 @@ class FunctionTranslator:
             local_var.py_type = self.stack_types[-1]
             local_var.type = self.C_TYPE_MAP[self.stack_types[-1]]
         elif local_var.py_type != self.stack_types[-1]:
-            raise TypeError(f'variable {self.code.co_varnames[local_idx]} must have unchanging type')
+            raise TypeError(
+                f'variable {self.code.co_varnames[local_idx]} must have unchanging type'
+            )
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return Assignment(local_var, stack_var)
@@ -336,7 +375,9 @@ class FunctionTranslator:
             local_var.py_type = self.stack_types[-1]
             local_var.type = self.C_TYPE_MAP[self.stack_types[-1]]
         elif local_var.py_type != self.stack_types[-1]:
-            raise TypeError(f'variable {self.code.co_names[local_idx]} must have unchanging type')
+            raise TypeError(
+                f'variable {self.code.co_names[local_idx]} must have unchanging type'
+            )
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return Assignment(local_var, stack_var)
@@ -372,7 +413,12 @@ class FunctionTranslator:
             print('stack_depths:', self.stack_depths[self.instr_idx])
             print('stack_types:', self.stack_types)
             print(instr.opname)
+            print(instr)
             self.cur_instr = instr
+            # add a label if the instruction is a jump target
+            if instr.is_jump_target:
+                self.fb.statements.append(f'L{instr.offset}:;')
+
             self.fb.statements.append(self.opcode_map(instr.opname)())
             self.instr_idx += 1
 
