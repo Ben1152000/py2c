@@ -74,3 +74,37 @@ class Print:
     def __str__(self):
         return f'printf("{" ".join([Print.FORMATTERS[arg.type] for arg in self.args])}\\n"' \
                f", {', '.join([arg.name for arg in self.args])});\n"
+
+
+class Range:
+    def __init__(self, args=None):
+        if args:
+            self.start = 0 if len(args) < 2 else args[0]
+            self.stop = args[0] if len(args) < 2 else args[1]
+            self.step = 1 if len(args) < 3 else args[2]
+
+
+class ForLoop:
+    def __init__(self, var, range_, gflc):
+        self.var = var
+        self.range = range_
+        self.gflc = gflc
+
+    def __str__(self):
+        name = self.var.name
+        output = ''
+
+        start = self.range.start
+        if isinstance(self.range.start, Variable):
+            output += f'long for{self.gflc * 3} = {self.range.start.name};\n'
+            start = f'for{self.gflc * 3}'
+
+        output += f'long for{self.gflc * 3 + 1} = {self.range.stop.name};\n'
+        stop = f'for{self.gflc * 3 + 1}'
+
+        step = self.range.step
+        if isinstance(self.range.step, Variable):
+            output += f'long for{self.gflc * 3 + 2} = {self.range.step.name};\n'
+            step = f'for{self.gflc * 3 + 2}'
+
+        return f'{output}for ({name} = {start}; {name} < {stop}; {name} += {step}) {{\n'

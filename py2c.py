@@ -2,7 +2,7 @@ import dis
 import inspect
 from ir import FunctionBlock, Assignment, \
     Variable, FunctionPointer, FunctionCall, Print, \
-    IfStatement
+    IfStatement, Range, ForLoop
 import marshal
 import sys
 import types
@@ -83,6 +83,13 @@ class FunctionTranslator:
             self.stack_depths.append(depth)
             depth += dis.stack_effect(instruction.opcode, instruction.arg)
 
+        # top of stack is the next closing bracket we need to add
+        # this was Ben's idea
+        self.for_stack = [-1]
+
+        # global for-loop counter
+        self.gflc = -1
+
     # return the variable corresponding to the result of the instruction
     # based on current stack depth and variable type
     def res_stack_var(self, _type):
@@ -143,6 +150,28 @@ class FunctionTranslator:
         return Assignment(stack_var,
                           f'{lhs_stack_var.name} * {rhs_stack_var.name}')
 
+    def BINARY_SUBTRACT(self):
+        lhs_type = self.stack_types[-2]
+        rhs_type = self.stack_types[-1]
+        if (lhs_type not in FunctionTranslator.NUMERIC_TYPES) or (
+                rhs_type not in FunctionTranslator.NUMERIC_TYPES):
+            raise Exception(
+                f'{inspect.stack()[0][3]}:'
+                ' addition on non-numeric types is not implemented')
+
+        res_type = float if (lhs_type == float or rhs_type == float) else int
+
+        stack_var = self.res_stack_var(res_type)
+        lhs_stack_var = self.get_stack_var(1)
+        rhs_stack_var = self.get_stack_var(0)
+
+        self.stack_types.pop()
+        self.stack_types.pop()
+        self.stack_types.append(res_type)
+
+        return Assignment(stack_var,
+                          f'{lhs_stack_var.name} - {rhs_stack_var.name}')
+
     def BUILD_CONST_KEY_MAP(self):
         count = self.cur_instr.arg
         self.stack_types.pop()  # tuple of keys
@@ -164,6 +193,9 @@ class FunctionTranslator:
         if isinstance(fp, Print):
             self.stack_types.append(None)
             return Print(args=args)
+        if isinstance(fp, Range):
+            self.stack_types.append(Range(args=args))
+            return ''
         ret_type = fp.func_sig[-1][0]
         self.stack_types.append(ret_type)
         if ret_type is None:
@@ -186,6 +218,22 @@ class FunctionTranslator:
         return Assignment(
             stack_var, f'{lhs_stack_var.name} {op_name} {rhs_stack_var.name}')
 
+    def FOR_ITER(self):
+        delta = self.cur_instr.arg
+
+        self.for_stack.append(self.cur_instr.offset + delta)
+
+        range_ = self.stack_types[-1]
+
+        self.stack_types.append(int)
+        stack_var = self.res_stack_var(int)
+
+        self.gflc += 1
+        return ForLoop(stack_var, range_, self.gflc)
+
+    def GET_ITER(self):
+        return ''
+
     def INPLACE_ADD(self):
         return self.BINARY_ADD()
 
@@ -193,6 +241,13 @@ class FunctionTranslator:
         return self.BINARY_MULTIPLY()
 
     def JUMP_ABSOLUTE(self):
+        if self.cur_instr.offset == self.for_stack[-1]:
+            # we are the end of a for-loop
+            self.for_stack.pop()
+            # pop off the iterator
+            # self.stack_types.pop()
+            return '}\n'
+
         target = self.cur_instr.arg
         return f'goto L{target};\n'
 
@@ -238,21 +293,34 @@ class FunctionTranslator:
         global_name = self.code.co_names[self.cur_instr.arg]
         global_var = self.globals['locals'][self.globals['names'].index(
             global_name)]
-        local_type = type(global_var)
-        if local_type == FunctionPointer:
+        print('the index:', self.globals['names'].index(global_name))
+        print(self.globals)
+        global_type = type(global_var)
+        print('debug: ', 'gname', global_name, 'gvar', global_var, 'gtype', global_type)
+        if global_type == FunctionPointer:
             self.stack_types.append(global_var)
             return ''
         # if the global variable doesn't have a type assign it type of TOS
         if type(global_var) == Variable and global_var.py_type != '':
+            print(global_var.name)
+            print(global_var.type)
+            print(global_var.py_type)
             self.stack_types.append(global_var.py_type)
             stack_var = self.res_stack_var(global_var.py_type)
             return Assignment(stack_var, global_var)
+        if global_name == 'print':
+            self.stack_types.append(Print())
+            return ''
+        if global_name == 'range':
+            self.stack_types.append(Range())
+            return ''
         # TODO get the actual type of the global var
         self.stack_types.append(None)
         return ''
 
     def LOAD_NAME(self):
         local_idx = self.cur_instr.arg
+        local_name = self.code.co_names[local_idx]
         local_var = self.fb.local_vars[local_idx]
         if type(local_var) == FunctionPointer:
             self.stack_types.append(local_var)
@@ -262,8 +330,11 @@ class FunctionTranslator:
             self.stack_types.append(local_var.py_type)
             stack_var = self.res_stack_var(local_var.py_type)
             return Assignment(stack_var, local_var)
-        if self.code.co_names[local_idx] == 'print':
+        if local_name == 'print':
             self.stack_types.append(Print())
+            return ''
+        if local_name == 'range':
+            self.stack_types.append(Range())
             return ''
         # TODO get the actual type of the local var
         self.stack_types.append(None)
@@ -301,6 +372,12 @@ class FunctionTranslator:
         func_sig = [(FunctionTranslator.STR_TO_TYPE[param_types[i]],
                      param_names[i]) for i in range(len(param_names))]
 
+        fp = FunctionPointer(name, func_sig)
+        # store the function pointer a bit sooner to handle recursive functions
+        # assumes the next instruction is STORE_NAME
+        local_idx = self.instructions[self.instr_idx + 1].arg
+        self.fb.local_vars[local_idx] = fp
+
         # recursively compile the function, add it to func decls
         func_body, rec_func_decls = FunctionTranslator(
             code=code_object, func_sig=func_sig,
@@ -310,7 +387,6 @@ class FunctionTranslator:
             f'{", ".join([f"{FunctionTranslator.C_TYPE_MAP[param[0]]} {param[1]}" for param in func_sig[:-1]])}' \
             f') {{{func_body}}}'  # construct function signature
         self.func_decls.append(func_decl)
-        fp = FunctionPointer(name, func_sig)
         self.stack_types.append(fp)
         return ''
 
@@ -417,7 +493,7 @@ class FunctionTranslator:
             self.cur_instr = instr
             # add a label if the instruction is a jump target
             if instr.is_jump_target:
-                self.fb.statements.append(f'L{instr.offset}:;')
+                self.fb.statements.append(f'L{instr.offset}:;\n')
 
             self.fb.statements.append(self.opcode_map(instr.opname)())
             self.instr_idx += 1
