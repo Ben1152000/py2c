@@ -3,9 +3,6 @@
 import sys, py_compile, marshal
 from translator import CodeTranslator
 
-a = py_compile.compile('test/loops.py')
-print(a)
-
 def compile_to_bytecode(filepath):
     pyc_file = py_compile.compile(filepath)
     readfile = open(pyc_file, 'rb')

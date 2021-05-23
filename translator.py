@@ -1,11 +1,9 @@
-import dis
-import inspect
+import dis, inspect, types
 from ir import FunctionBlock, Assignment, \
     Variable, FunctionPointer, FunctionCall, Print, \
     IfStatement, Range, ForLoop
-import marshal
-import sys
-import types
+
+DEBUG = False
 
 
 class CodeTranslator:
@@ -179,7 +177,6 @@ class FunctionTranslator:
         for i in range(count):
             self.stack_types.pop()
         self.stack_types.append(dict)
-        print("I'm building a const key map! whatever that means...")
         return ''
 
     def CALL_FUNCTION(self):
@@ -286,7 +283,6 @@ class FunctionTranslator:
             return ''
         if local_var is None:
             return ''
-        print(stack_var, local_var)
         return Assignment(stack_var, local_var)
 
     def LOAD_GLOBAL(self):
@@ -296,15 +292,11 @@ class FunctionTranslator:
         else:
             global_var = self.fb.local_vars[self.cur_instr.arg]
         global_type = type(global_var)
-        print('debug: ', 'gname', global_name, 'gvar', global_var, 'gtype', global_type)
         if global_type == FunctionPointer:
             self.stack_types.append(global_var)
             return ''
         # if the global variable doesn't have a type assign it type of TOS
         if type(global_var) == Variable and global_var.py_type != '':
-            print(global_var.name)
-            print(global_var.type)
-            print(global_var.py_type)
             self.stack_types.append(global_var.py_type)
             stack_var = self.res_stack_var(global_var.py_type)
             return Assignment(stack_var, global_var)
@@ -486,10 +478,10 @@ class FunctionTranslator:
             self.fb.fast_local_vars.append(Variable(f'fasloc{i}', ''))
 
         for instr in self.instructions:
-            print('stack_depths:', self.stack_depths[self.instr_idx])
-            print('stack_types:', self.stack_types)
-            print(instr.opname)
-            print(instr)
+            if DEBUG:
+                print('\tstack_depths:', self.stack_depths[self.instr_idx])
+                print('\tstack_types:', self.stack_types)
+                print(instr.opname, '->', instr)
             self.cur_instr = instr
             # add a label if the instruction is a jump target
             if instr.is_jump_target:
@@ -498,26 +490,6 @@ class FunctionTranslator:
             self.fb.statements.append(self.opcode_map(instr.opname)())
             self.instr_idx += 1
 
-        # print(self.fb.statements)
         output += str(self.fb)
-        print(str(self.fb))
 
         return (output, self.func_decls)
-
-
-def get_code(fname):
-    f = open(fname, "rb")
-    f.read(16)
-    code = marshal.load(f)
-    return code
-
-
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print(f'Usage: {sys.argv[0]} pyc_file [out_file]')
-        exit(1)
-    if len(sys.argv) < 3:
-        sys.argv.append('.'.join(sys.argv[1].split('.')[:-1]) + '.c')
-    code = get_code(sys.argv[1])
-    with open(sys.argv[2], 'w') as writefile:
-        writefile.write(CodeTranslator(code).translate())

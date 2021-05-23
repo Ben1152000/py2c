@@ -1,4 +1,8 @@
-
-b = 1
+a: int = 0
+b: int = 1
+if a:
+    b = a
+print(a, b)
 if b:
-    a = 1
+    a = b
+print(a, b)
