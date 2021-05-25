@@ -46,7 +46,7 @@ class FunctionTranslator:
         'bool': 'long'
     }
     STR_TO_TYPE = {'int': int, 'float': float, 'str': str, 'bool': bool}
-    NUMERIC_TYPES = [int, float]
+    NUMERIC_TYPES = [int, float, bool]
 
     def __init__(self, code, func_sig, globals_=None):
         self.opcode_map = lambda name: getattr(self, name)
@@ -311,6 +311,8 @@ class FunctionTranslator:
             return ''
         if const_val is None:
             return ''
+        if const_type == bool:
+            const_val = int(const_val)
         stack_var = self.res_stack_var(const_type)
         return Assignment(stack_var, Variable(const_val, const_type))
 
