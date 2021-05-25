@@ -15,11 +15,14 @@ BENCHMARKS = [
     'benchmarks/pythagorean',
 ]
 
-def time_execution(command):
+def time_execution(command, iterations):
     # TODO: use better timer metric
-    start = time.time()
-    os.system(command)
-    return time.time() - start
+    s = 0
+    for i in range(iterations):
+        start = time.time()
+        os.system(command)
+        s += time.time() - start
+    return s / iterations
 
 # compile all files in test
 if __name__ == '__main__':
@@ -35,10 +38,10 @@ if __name__ == '__main__':
         os.system(f'{C_COMPILER} -O3 {path}.c -o {path}-O3')
 
 
-        python_runtime = time_execution(f'python3 {path}.py > /dev/null 2>&1')
-        unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1')
-        optimized_runtime = time_execution(f'./{path}-O3 > /dev/null 2>&1')
+        python_runtime = time_execution(f'python3 {path}.py > /dev/null 2>&1', 10)
+        unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1', 10)
+        optimized_runtime = time_execution(f'./{path}-O3 > /dev/null 2>&1', 10)
 
-        print('Python:', python_runtime, '(100%)')
-        print('Unoptimized C:', unoptimized_runtime, f'({100 * unoptimized_runtime / python_runtime}%)')
-        print('Optimized C:', optimized_runtime, f'({100 * optimized_runtime / python_runtime}%)')
+        print('Python:', f'{python_runtime:.2f} seconds', '(100%)')
+        print('Unoptimized C:', f'{unoptimized_runtime:.2f} seconds', f'({100 * unoptimized_runtime / python_runtime:.2f}%, {python_runtime / unoptimized_runtime:.2f}x)')
+        print('Optimized C:', f'{optimized_runtime:.2f} seconds', f'({100 * optimized_runtime / python_runtime:.2f}%, {python_runtime / optimized_runtime:.2f}x)')

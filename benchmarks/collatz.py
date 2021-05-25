@@ -1,4 +1,3 @@
-
 def c(n: int) -> int:
     i: int = 0
     while n > 1:

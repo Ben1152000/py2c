@@ -1,4 +1,3 @@
-
 def t(c: int, p: bool) -> int:
     n: int = 0
     for a in range(c):
