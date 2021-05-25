@@ -1,4 +1,3 @@
-
 def p(n: int) -> bool:
     if n < 4:
         return n > 1

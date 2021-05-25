@@ -1,4 +1,3 @@
-
 def p(n: int) -> bool:
     s: int = 0
     for i in range(1, n):
