@@ -5,3 +5,7 @@ test/*.c
 .DS_Store
 out
 a.out
+benchmarks/*
+!benchmarks/*.*
+!benchmarks/*/
+benchmarks/__pycache__/

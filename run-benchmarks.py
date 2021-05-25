@@ -7,7 +7,12 @@ from translator import CodeTranslator
 C_COMPILER = 'gcc'
 
 BENCHMARKS = [
+    'benchmarks/collatz',
     'benchmarks/fibonacci',
+    'benchmarks/perfect',
+    'benchmarks/prime_factor',
+    'benchmarks/primes',
+    'benchmarks/pythagorean',
 ]
 
 def time_execution(command):

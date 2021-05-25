@@ -6,5 +6,5 @@ def f(n: int) -> int:
     else:
         return f(n - 1) + f(n - 2)
 
-for i in range(40):
+for i in range(35):
     print(i, f(i))
