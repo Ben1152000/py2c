@@ -13,6 +13,9 @@ Usage:
 - Run `./compile` to compile the example files
 - Compiled files will be in `tests/__pycache__`
 
+Ideas for benchmarks:
+- https://capra.cs.cornell.edu/bril/tools/bench.html
+
 ## TODO:
 1) Get 6-10 working cases that display a range of python syntax.
 2) *implement loops

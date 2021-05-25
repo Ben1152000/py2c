@@ -1,5 +1,11 @@
+__pycache__/
+.mypy_cache/
+cython/
+test/*.c
 .DS_Store
 out
-__pycache__/
 a.out
-cython/
+benchmarks/*
+!benchmarks/*.*
+!benchmarks/*/
+benchmarks/__pycache__/
