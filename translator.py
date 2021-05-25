@@ -126,6 +126,50 @@ class FunctionTranslator:
         return Assignment(stack_var,
                           f'{lhs_stack_var.name} + {rhs_stack_var.name}')
 
+    def BINARY_FLOOR_DIVIDE(self):
+        lhs_type = self.stack_types[-2]
+        rhs_type = self.stack_types[-1]
+        if (lhs_type not in FunctionTranslator.NUMERIC_TYPES) or (
+                rhs_type not in FunctionTranslator.NUMERIC_TYPES):
+            raise Exception(
+                f'{inspect.stack()[0][3]}:'
+                ' addition on non-numeric types is not implemented')
+
+        res_type = float if (lhs_type == float or rhs_type == float) else int
+
+        stack_var = self.res_stack_var(res_type)
+        lhs_stack_var = self.get_stack_var(1)
+        rhs_stack_var = self.get_stack_var(0)
+
+        self.stack_types.pop()
+        self.stack_types.pop()
+        self.stack_types.append(res_type)
+
+        return Assignment(stack_var,
+                          f'{lhs_stack_var.name} / {rhs_stack_var.name}')
+
+    def BINARY_MODULO(self):
+        lhs_type = self.stack_types[-2]
+        rhs_type = self.stack_types[-1]
+        if (lhs_type not in FunctionTranslator.NUMERIC_TYPES) or (
+                rhs_type not in FunctionTranslator.NUMERIC_TYPES):
+            raise Exception(
+                f'{inspect.stack()[0][3]}:'
+                ' addition on non-numeric types is not implemented')
+
+        res_type = float if (lhs_type == float or rhs_type == float) else int
+
+        stack_var = self.res_stack_var(res_type)
+        lhs_stack_var = self.get_stack_var(1)
+        rhs_stack_var = self.get_stack_var(0)
+
+        self.stack_types.pop()
+        self.stack_types.pop()
+        self.stack_types.append(res_type)
+
+        return Assignment(stack_var,
+                          f'{lhs_stack_var.name} % {rhs_stack_var.name}')
+
     def BINARY_MULTIPLY(self):
         lhs_type = self.stack_types[-2]
         rhs_type = self.stack_types[-1]
@@ -217,11 +261,9 @@ class FunctionTranslator:
 
     def FOR_ITER(self):
         delta = self.cur_instr.arg
-
         self.for_stack.append(self.cur_instr.offset + delta)
 
         range_ = self.stack_types[-1]
-
         self.stack_types.append(int)
         stack_var = self.res_stack_var(int)
 
@@ -234,6 +276,9 @@ class FunctionTranslator:
     def INPLACE_ADD(self):
         return self.BINARY_ADD()
 
+    def INPLACE_FLOOR_DIVIDE(self):
+        return self.BINARY_FLOOR_DIVIDE()
+    
     def INPLACE_MULTIPLY(self):
         return self.BINARY_MULTIPLY()
 
@@ -246,6 +291,11 @@ class FunctionTranslator:
             return '}\n'
 
         target = self.cur_instr.arg
+        return f'goto L{target};\n'
+
+    def JUMP_FORWARD(self):
+        delta = self.cur_instr.arg
+        target = self.cur_instr.offset + delta + 2
         return f'goto L{target};\n'
 
     def LOAD_CONST(self):
@@ -388,12 +438,18 @@ class FunctionTranslator:
 
     def POP_JUMP_IF_FALSE(self):
         target = self.cur_instr.arg
+        target_instr = self.instructions[target // 2]
+        if target_instr.opname == 'FOR_ITER':
+            target = target_instr.offset + target_instr.arg
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return IfStatement(f'!{stack_var.name}', f'goto L{target};')
 
     def POP_JUMP_IF_TRUE(self):
         target = self.cur_instr.arg
+        target_instr = self.instructions[target // 2]
+        if target_instr.opname == 'FOR_ITER':
+            target = target_instr.offset + target_instr.arg
         stack_var = self.get_stack_var(0)
         self.stack_types.pop()
         return IfStatement(f'{stack_var.name}', f'goto L{target};')
@@ -412,7 +468,12 @@ class FunctionTranslator:
 
     def STORE_FAST(self):
         local_idx = self.cur_instr.arg
-        local_var = self.fb.fast_local_vars[local_idx]
+        if local_idx < len(self.func_sig) - 1:
+            local_type, local_var = self.func_sig[local_idx]
+            local_var = Variable(local_var, local_type)
+            local_var.py_type = self.stack_types[-1]
+        else:
+            local_var = self.fb.fast_local_vars[local_idx]
         if self.stack_types[-1] == tuple:
             self.stack_types.pop()
             return ''
@@ -484,7 +545,7 @@ class FunctionTranslator:
                 print(instr.opname, '->', instr)
             self.cur_instr = instr
             # add a label if the instruction is a jump target
-            if instr.is_jump_target:
+            if instr.is_jump_target or instr.opname == 'JUMP_ABSOLUTE':
                 self.fb.statements.append(f'L{instr.offset}:;\n')
 
             self.fb.statements.append(self.opcode_map(instr.opname)())

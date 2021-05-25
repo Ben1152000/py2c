@@ -96,15 +96,17 @@ class ForLoop:
 
         start = self.range.start
         if isinstance(self.range.start, Variable):
-            output += f'long for{self.gflc * 3} = {self.range.start.name};\n'
-            start = f'for{self.gflc * 3}'
+            output += f'long for{self.gflc * 4} = {self.range.start.name};\n'
+            start = f'for{self.gflc * 4}'
 
-        output += f'long for{self.gflc * 3 + 1} = {self.range.stop.name};\n'
-        stop = f'for{self.gflc * 3 + 1}'
+        output += f'long for{self.gflc * 4 + 1} = {self.range.stop.name};\n'
+        stop = f'for{self.gflc * 4 + 1}'
 
         step = self.range.step
         if isinstance(self.range.step, Variable):
-            output += f'long for{self.gflc * 3 + 2} = {self.range.step.name};\n'
-            step = f'for{self.gflc * 3 + 2}'
+            output += f'long for{self.gflc * 4 + 2} = {self.range.step.name};\n'
+            step = f'for{self.gflc * 4 + 2}'
 
-        return f'{output}for ({name} = {start}; {name} < {stop}; {name} += {step}) {{\n'
+        iterator = f'for{self.gflc * 4 + 3}'
+
+        return f'{output}for (long {iterator} = {start}; {iterator} < {stop}; {iterator} += {step}) {{\n{name} = {iterator};\n'
