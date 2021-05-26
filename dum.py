@@ -1,3 +1,6 @@
+# Based on code written by Ned Batchelder:
+# https://nedbatchelder.com/blog/200804/the_structure_of_pyc_files.html
+
 import dis
 import marshal
 import struct
