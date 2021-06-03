@@ -17,10 +17,11 @@ Ideas for benchmarks:
 - https://capra.cs.cornell.edu/bril/tools/bench.html
 
 ## TODO:
-1) Get 6-10 working cases that display a range of python syntax.
-2) *implement loops
-3) Runtime benchmark comparisons to python3.9, cpython, cython, java converter?
-4) explanation!
+1) Runtime benchmark comparisons to python3.9, cpython, cython, java converter?
+   1) cython
+   2) pypy
+   3) native c
+2) explanation!
 
 ## Presentation:
 1) explain the project idea
