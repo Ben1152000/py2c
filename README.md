@@ -16,13 +16,15 @@ Usage:
 Ideas for benchmarks:
 - https://capra.cs.cornell.edu/bril/tools/bench.html
 
-To run the benchmarks please install Cython first via `pip install Cython`
+To run the benchmarks please install Cython via `pip install Cython`
+Please also install PyPy 3.5 or higher using you system's package manager.
 
 ## TODO:
-1) Get 6-10 working cases that display a range of python syntax.
-2) *implement loops
-3) Runtime benchmark comparisons to python3.9, cpython, cython, java converter?
-4) explanation!
+1) Runtime benchmark comparisons to python3.9, cpython, cython, java converter?
+   1) cython
+   2) pypy
+   3) native c
+2) explanation!
 
 ## Presentation:
 1) explain the project idea

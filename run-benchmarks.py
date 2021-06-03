@@ -15,7 +15,10 @@ BENCHMARKS = [
     'benchmarks/prime_factor',
     'benchmarks/primes',
     'benchmarks/pythagorean',
+    'benchmarks/summation',
 ]
+
+NUM_TRIES = 2  # 10
 
 
 def time_execution(command, iterations):
@@ -43,9 +46,13 @@ if __name__ == '__main__':
         os.system(f'{CYTHON_COMPILER} -o {path}-cython {path}.py -l')
 
         python_runtime = time_execution(f'python3 {path}.py > /dev/null 2>&1',
-                                        10)
-        unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1', 10)
-        optimized_runtime = time_execution(f'./{path}-O3 > /dev/null 2>&1', 10)
+                                        NUM_TRIES)
+        unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1',
+                                             NUM_TRIES)
+        optimized_runtime = time_execution(f'./{path}-O3 > /dev/null 2>&1',
+                                           NUM_TRIES)
+        pypy_runtime = time_execution(f'pypy3 {path}.py > /dev/null 2>&1',
+                                      NUM_TRIES)
         cython_runtime = time_execution(f'./{path}-cython > /dev/null 2>&1',
                                         10)
 
@@ -57,6 +64,10 @@ if __name__ == '__main__':
         print(
             'Optimized C:', f'{optimized_runtime:.2f} seconds',
             f'({100 * optimized_runtime / python_runtime:.2f}%, {python_runtime / optimized_runtime:.2f}x)'
+        )
+        print(
+            'PyPy (JIT):', f'{pypy_runtime:.2f} seconds',
+            f'({100 * pypy_runtime / python_runtime:.2f}%, {python_runtime / pypy_runtime:.2f}x)'
         )
         print(
             'Cython executable:', f'{cython_runtime:.2f} seconds',
