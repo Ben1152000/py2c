@@ -5,14 +5,19 @@ import os
 from py2c.compile import compile_to_bytecode
 from py2c.translator import CodeTranslator
 
-C_COMPILER = 'gcc'
-PYTHON_INTERPRETER = 'python3.9'
-PYPY_INTERPRETER = 'pypy37'
-isCythonInstalled = False
+################################################################################
+## User-Defined Constants: (make sure to change these to match your system)   ##
+################################################################################
+
+C_COMPILER = 'gcc'  # name of the c compiler
+PYTHON_INTERPRETER = 'python3.9'  # name of python interpreter
+PYPY_INTERPRETER = 'pypy37'  # name of pypy command
+isCythonInstalled = False  # set to true if cython is installed
 hasIdiomaticVersion = True
 
-NUM_TRIES = 2  # 10
+NUM_TRIES = 10  # number of times each benchmark is run
 
+# List of the benchmarks to be tested:
 BENCHMARKS = [
     'benchmarks/fibonacci',
     'benchmarks/perfect',
@@ -23,6 +28,7 @@ BENCHMARKS = [
     'benchmarks/collatz',
 ]
 
+################################################################################
 
 def check_installed(command):
     from shutil import which
@@ -69,7 +75,7 @@ if __name__ == '__main__':
 
         print(f'  Python ({NUM_TRIES} trials):')
         python_runtime = time_execution(f'{PYTHON_INTERPRETER} {path}.py > /dev/null 2>&1', NUM_TRIES)
-        print(f'\tavg:\t{python_runtime:.2f} seconds', '(100%)')
+        print(f'\tavg:\t{python_runtime:.2f} seconds', '(100%, 1.00x)')
 
         print(f'  Unoptimized C ({NUM_TRIES} trials):')
         unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1', NUM_TRIES)
