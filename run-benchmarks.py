@@ -9,6 +9,7 @@ C_COMPILER = 'gcc'
 PYTHON_INTERPRETER = 'python3.9'
 PYPY_INTERPRETER = 'pypy37'
 isCythonInstalled = False
+hasIdiomaticVersion = True
 
 NUM_TRIES = 2  # 10
 
@@ -91,4 +92,11 @@ if __name__ == '__main__':
             print(
                 'Cython executable:', f'{cython_runtime:.2f} seconds',
                 f'({100 * cython_runtime / python_runtime:.2f}%, {python_runtime / cython_runtime:.2f}x)'
+            )
+
+        if hasIdiomaticVersion:
+            idiomatic_runtime = time_execution(f'./{path}-i > /dev/null 2>&1', NUM_TRIES)
+            print(
+                'Idiomatic C:', f'{idiomatic_runtime:.2f} seconds',
+                f'({100 * idiomatic_runtime / python_runtime:.2f}%, {python_runtime / idiomatic_runtime:.2f}x)'
             )
