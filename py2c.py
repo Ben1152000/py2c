@@ -1,16 +1,10 @@
 #!/usr/bin/env python3.9
 
-import sys, py_compile, marshal
-from translator import CodeTranslator
-
-def compile_to_bytecode(filepath):
-    pyc_file = py_compile.compile(filepath)
-    readfile = open(pyc_file, 'rb')
-    readfile.read(16)  # get through header bits
-    bytecode = marshal.load(readfile)
-    return bytecode
-
 if __name__ == '__main__':
+
+    import sys, py_compile, marshal
+    from py2c.translator import CodeTranslator
+    from py2c.compile import compile_to_bytecode
 
     if len(sys.argv) < 2:
         print(f'Usage: {sys.argv[0]} pyc_file [out_file]')

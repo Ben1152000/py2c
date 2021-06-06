@@ -2,8 +2,8 @@
 
 import time
 import os
-from py2c import compile_to_bytecode
-from translator import CodeTranslator
+from py2c.compile import compile_to_bytecode
+from py2c.translator import CodeTranslator
 
 C_COMPILER = 'gcc'
 PYTHON_INTERPRETER = 'python3.9'
@@ -14,13 +14,13 @@ hasIdiomaticVersion = True
 NUM_TRIES = 2  # 10
 
 BENCHMARKS = [
-    'benchmarks/collatz',
     'benchmarks/fibonacci',
     'benchmarks/perfect',
     'benchmarks/prime_factor',
     'benchmarks/primes',
     'benchmarks/pythagorean',
     'benchmarks/summation',
+    'benchmarks/collatz',
 ]
 
 
@@ -37,7 +37,9 @@ def time_execution(command, iterations):
     for i in range(iterations):
         start = time.time()
         os.system(command)
-        s += time.time() - start
+        start = time.time() - start
+        print(f'\t{i}:\t{start:.2f} seconds')
+        s += start
     return s / iterations
 
 
@@ -54,7 +56,7 @@ if __name__ == '__main__':
         translation_time = time.time()
         c_source = CodeTranslator(bytecode).translate()
         translation_time = time.time() - translation_time
-        print(f'Translation time: {translation_time * 1000:.2f} ms')
+        print(f'  Translation time: {translation_time * 1000:.2f} ms')
         
         with open(f'{path}.c', 'w') as writefile:
             writefile.write(c_source)
@@ -63,40 +65,46 @@ if __name__ == '__main__':
         compilation_time = time.time()
         os.system(f'{C_COMPILER} -O3 {path}.c -o {path}-O3')
         compilation_time = time.time() - compilation_time
-        print(f'Compilation time: {compilation_time * 1000:.2f} ms')
+        print(f'  Compilation time: {compilation_time * 1000:.2f} ms')
 
+        print(f'  Python ({NUM_TRIES} trials):')
         python_runtime = time_execution(f'{PYTHON_INTERPRETER} {path}.py > /dev/null 2>&1', NUM_TRIES)
-        print('Python:', f'{python_runtime:.2f} seconds', '(100%)')
+        print(f'\tavg:\t{python_runtime:.2f} seconds', '(100%)')
 
+        print(f'  Unoptimized C ({NUM_TRIES} trials):')
         unoptimized_runtime = time_execution(f'./{path} > /dev/null 2>&1', NUM_TRIES)
         print(
-            'Unoptimized C:', f'{unoptimized_runtime:.2f} seconds',
+            f'\tavg:\t{unoptimized_runtime:.2f} seconds',
             f'({100 * unoptimized_runtime / python_runtime:.2f}%, {python_runtime / unoptimized_runtime:.2f}x)'
         )
 
+        print(f'  Optimized C ({NUM_TRIES} trials):')
         optimized_runtime = time_execution(f'./{path}-O3 > /dev/null 2>&1', NUM_TRIES)
         print(
-            'Optimized C:', f'{optimized_runtime:.2f} seconds',
+            f'\tavg:\t{optimized_runtime:.2f} seconds',
             f'({100 * optimized_runtime / python_runtime:.2f}%, {python_runtime / optimized_runtime:.2f}x)'
         )
 
+        print(f'  PyPy (JIT) ({NUM_TRIES} trials):')
         pypy_runtime = time_execution(f'{PYPY_INTERPRETER} {path}.py > /dev/null 2>&1', NUM_TRIES)
         print(
-            'PyPy (JIT):', f'{pypy_runtime:.2f} seconds',
+            f'\tavg:\t{pypy_runtime:.2f} seconds',
             f'({100 * pypy_runtime / python_runtime:.2f}%, {python_runtime / pypy_runtime:.2f}x)'
         )
 
         if isCythonInstalled:
             os.system(f'./cython_compiler.sh -o {path}-cython {path}.py -l')
+            print(f'  Cython ({NUM_TRIES} trials):')
             cython_runtime = time_execution(f'./{path}-cython > /dev/null 2>&1', NUM_TRIES)
             print(
-                'Cython executable:', f'{cython_runtime:.2f} seconds',
+                f'\tavg:\t{cython_runtime:.2f} seconds',
                 f'({100 * cython_runtime / python_runtime:.2f}%, {python_runtime / cython_runtime:.2f}x)'
             )
 
         if hasIdiomaticVersion:
+            print(f'  Idiomatic C ({NUM_TRIES} trials):')
             idiomatic_runtime = time_execution(f'./{path}-i > /dev/null 2>&1', NUM_TRIES)
             print(
-                'Idiomatic C:', f'{idiomatic_runtime:.2f} seconds',
+                f'\tavg:\t{idiomatic_runtime:.2f} seconds',
                 f'({100 * idiomatic_runtime / python_runtime:.2f}%, {python_runtime / idiomatic_runtime:.2f}x)'
             )

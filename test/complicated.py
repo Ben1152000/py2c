@@ -1,3 +1,5 @@
+# This test contains features (i.e., strings and tuples) that are not yet
+# implemented in py2c. It will *not* work.
 
 def function1() -> None:
     pass

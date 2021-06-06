@@ -1,5 +1,5 @@
 import dis, inspect, types
-from ir import FunctionBlock, Assignment, \
+from py2c.ir import FunctionBlock, Assignment, \
     Variable, FunctionPointer, FunctionCall, Print, \
     IfStatement, Range, ForLoop
 
